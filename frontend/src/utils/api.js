@@ -1,6 +1,16 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:5000';
+  }
+  return 'https://cassual-funnel.onrender.com';
+};
+
+const baseURL = getBaseURL();
 
 const api = axios.create({
   baseURL,

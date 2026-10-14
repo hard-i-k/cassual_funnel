@@ -1,3 +1,4 @@
-/demo        /demo.html    200
-/tracker.js  /tracker.js   200
-/*           /index.html   200
+/api/*   https://cassual-funnel.onrender.com/api/:splat  200!
+/demo    /demo.html                                       200
+/tracker.js /tracker.js                                   200
+/*       /index.html                                      200

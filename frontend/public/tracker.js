@@ -62,8 +62,8 @@
       return 'http://localhost:5000';
     }
 
-    // 6. Default to same origin or fallback
-    return window.location.origin.replace(/\/+$/, '');
+    // 6. Default remote API endpoint (live Render backend)
+    return 'https://cassual-funnel.onrender.com';
   }
 
   var API_URL = resolveApiUrl();
