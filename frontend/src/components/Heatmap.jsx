@@ -1,91 +1,167 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 
 export default function Heatmap({
   clicks = [],
   totalClicks: propTotalClicks,
   pageUrl = '',
   isLoading = false,
+  lastUpdated = null,
+  onRefresh = null,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const stageRef = useRef(null);
 
-  const [viewMode, setViewMode] = useState('density'); // 'density' | 'scatter' | 'grid'
-  const [radius, setRadius] = useState(30);
-  const [opacity, setOpacity] = useState(0.75);
+  // View & visualization controls
+  const [viewMode, setViewMode] = useState('hybrid'); // 'hybrid' | 'density' | 'scatter' | 'grid'
+  const [scaleMode, setScaleMode] = useState('fit'); // 'fit' | '100' | '75' | '50'
+  const [computedScale, setComputedScale] = useState(1);
+  const [radius, setRadius] = useState(36);
+  const [opacity, setOpacity] = useState(0.85);
+  const [showWireframe, setShowWireframe] = useState(true);
   const [hoverInfo, setHoverInfo] = useState(null);
 
-  // Normalize clicks data
-  const normalizedClicks = useMemo(() => {
-    if (!Array.isArray(clicks)) return [];
-    return clicks
+  // Normalize clicks data and extract viewport dimensions
+  const { normalizedClicks, detectedViewport } = useMemo(() => {
+    if (!Array.isArray(clicks)) return { normalizedClicks: [], detectedViewport: { width: 1440, height: 900 } };
+
+    let maxW = 1280;
+    let maxH = 800;
+    let recordedW = 0;
+    let recordedH = 0;
+    let recordedCount = 0;
+
+    const list = clicks
       .map((c) => {
         const x = Number(c.x ?? c.click_x ?? c.clickX ?? c.coordinates?.x ?? 0);
         const y = Number(c.y ?? c.click_y ?? c.clickY ?? c.coordinates?.y ?? 0);
         const weight = Number(c.count ?? c.weight ?? c.density ?? 1);
-        return { x, y, weight, original: c };
+        const vw = Number(c.viewport_width ?? c.viewportWidth ?? 0);
+        const vh = Number(c.viewport_height ?? c.viewportHeight ?? 0);
+
+        if (vw > 0 && vh > 0) {
+          recordedW += vw;
+          recordedH += vh;
+          recordedCount++;
+        }
+
+        if (x + 80 > maxW) maxW = x + 80;
+        if (y + 80 > maxH) maxH = y + 80;
+
+        return {
+          x,
+          y,
+          weight,
+          sessionId: c.session_id || c.sessionId || '',
+          timestamp: c.timestamp || c.created_at || '',
+          original: c,
+        };
       })
-      .filter((c) => !isNaN(c.x) && !isNaN(c.y));
+      .filter((c) => !isNaN(c.x) && !isNaN(c.y) && c.x >= 0 && c.y >= 0);
+
+    // Determine representative viewport
+    let width = 1440;
+    let height = 900;
+    if (recordedCount > 0) {
+      width = Math.round(recordedW / recordedCount);
+      height = Math.round(recordedH / recordedCount);
+    }
+    width = Math.max(width, maxW, 1200);
+    height = Math.max(height, maxH, 750);
+
+    return { normalizedClicks: list, detectedViewport: { width, height } };
   }, [clicks]);
 
   const totalClicksCount = propTotalClicks ?? normalizedClicks.reduce((sum, c) => sum + (c.weight || 1), 0);
 
-  // Dynamic viewport dimensions based on max coordinate or default 1200x800
-  const viewportBounds = useMemo(() => {
-    let maxX = 1200;
-    let maxY = 800;
+  // Identify top 3 hotspot clusters
+  const topHotspots = useMemo(() => {
+    if (normalizedClicks.length === 0) return [];
+    // Group clicks into 40px grid buckets to find density centers
+    const bucketMap = new Map();
     normalizedClicks.forEach((c) => {
-      if (c.x + 80 > maxX) maxX = Math.ceil((c.x + 80) / 100) * 100;
-      if (c.y + 80 > maxY) maxY = Math.ceil((c.y + 80) / 100) * 100;
+      const bx = Math.round(c.x / 40) * 40;
+      const by = Math.round(c.y / 40) * 40;
+      const key = `${bx},${by}`;
+      if (!bucketMap.has(key)) {
+        bucketMap.set(key, { x: bx, y: by, count: 0, clicks: [] });
+      }
+      const b = bucketMap.get(key);
+      b.count += c.weight || 1;
+      b.clicks.push(c);
     });
-    return { width: Math.max(maxX, 1000), height: Math.max(maxY, 700) };
+
+    return Array.from(bucketMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
   }, [normalizedClicks]);
 
-  // Color palette lookup function for gradient density
-  const getColorForDensity = (value) => {
-    // 0 -> blue, 0.25 -> cyan, 0.5 -> green, 0.75 -> yellow, 1.0 -> red
-    const v = Math.min(Math.max(value, 0), 1);
-    if (v < 0.25) {
-      const t = v / 0.25;
-      return `rgba(59, 130, 246, ${0.15 + t * 0.4})`; // blue
-    } else if (v < 0.5) {
-      const t = (v - 0.25) / 0.25;
-      return `rgba(6, 182, 212, ${0.4 + t * 0.3})`; // cyan
-    } else if (v < 0.75) {
-      const t = (v - 0.5) / 0.25;
-      return `rgba(234, 179, 8, ${0.6 + t * 0.25})`; // yellow
-    } else {
-      const t = (v - 0.75) / 0.25;
-      return `rgba(239, 68, 68, ${0.75 + t * 0.25})`; // red
-    }
-  };
+  // Handle responsive auto-fit scaling
+  const updateResponsiveScale = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth - 32; // subtract padding
+    if (containerWidth <= 0) return;
 
-  // Render Canvas Density Heatmap
+    if (scaleMode === 'fit') {
+      const scale = Math.min(1, containerWidth / detectedViewport.width);
+      setComputedScale(Math.max(0.25, Number(scale.toFixed(3))));
+    } else if (scaleMode === '100') {
+      setComputedScale(1);
+    } else if (scaleMode === '75') {
+      setComputedScale(0.75);
+    } else if (scaleMode === '50') {
+      setComputedScale(0.5);
+    }
+  }, [scaleMode, detectedViewport.width]);
+
   useEffect(() => {
-    if (viewMode !== 'density' || !canvasRef.current) return;
+    updateResponsiveScale();
+    const handleResize = () => updateResponsiveScale();
+    window.addEventListener('resize', handleResize);
+
+    const observer = new ResizeObserver(() => {
+      updateResponsiveScale();
+    });
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer.disconnect();
+    };
+  }, [updateResponsiveScale]);
+
+  // Draw High-Definition Thermal Heatmap on Canvas
+  useEffect(() => {
+    if ((viewMode !== 'density' && viewMode !== 'hybrid') || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    const width = viewportBounds.width;
-    const height = viewportBounds.height;
+    const { width, height } = detectedViewport;
 
     canvas.width = width;
     canvas.height = height;
-
     ctx.clearRect(0, 0, width, height);
 
     if (normalizedClicks.length === 0) return;
 
-    // 1. Draw gray/alpha radial blur circles on offscreen buffer
+    // 1. Create offscreen alpha buffer
     const offscreen = document.createElement('canvas');
     offscreen.width = width;
     offscreen.height = height;
     const offCtx = offscreen.getContext('2d');
 
+    // Draw radial Gaussian-like alpha gradient for each click point
     normalizedClicks.forEach(({ x, y, weight }) => {
       const r = radius;
       const grad = offCtx.createRadialGradient(x, y, 0, x, y, r);
-      const intensity = Math.min(0.2 * (weight || 1), 0.8);
+      // Intensity curve
+      const intensity = Math.min(0.28 * (weight || 1), 0.95);
       grad.addColorStop(0, `rgba(0, 0, 0, ${intensity})`);
+      grad.addColorStop(0.3, `rgba(0, 0, 0, ${intensity * 0.75})`);
+      grad.addColorStop(0.65, `rgba(0, 0, 0, ${intensity * 0.35})`);
+      grad.addColorStop(0.9, `rgba(0, 0, 0, ${intensity * 0.08})`);
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
       offCtx.fillStyle = grad;
@@ -94,81 +170,91 @@ export default function Heatmap({
       offCtx.fill();
     });
 
-    // 2. Read back pixel alpha values and apply thermal color ramp
-    const imgData = offCtx.getImageData(0, 0, width, height);
-    const data = imgData.data;
-
-    // Create a 256-step color lookup gradient
+    // 2. Build 256-step thermal color lookup ramp
     const paletteCanvas = document.createElement('canvas');
     paletteCanvas.width = 256;
     paletteCanvas.height = 1;
     const pCtx = paletteCanvas.getContext('2d');
     const pGrad = pCtx.createLinearGradient(0, 0, 256, 1);
-    pGrad.addColorStop(0.0, 'rgba(0, 0, 255, 0)');
-    pGrad.addColorStop(0.2, 'rgba(0, 120, 255, 0.4)');
-    pGrad.addColorStop(0.4, 'rgba(0, 255, 255, 0.7)');
-    pGrad.addColorStop(0.6, 'rgba(0, 255, 0, 0.8)');
-    pGrad.addColorStop(0.8, 'rgba(255, 255, 0, 0.9)');
-    pGrad.addColorStop(1.0, 'rgba(255, 0, 0, 1.0)');
+
+    // Modern velvet thermal ramp
+    pGrad.addColorStop(0.0, 'rgba(0, 0, 0, 0)');
+    pGrad.addColorStop(0.12, 'rgba(30, 58, 138, 0.45)');  // Deep Navy
+    pGrad.addColorStop(0.28, 'rgba(37, 99, 235, 0.75)');  // Sapphire Blue
+    pGrad.addColorStop(0.48, 'rgba(6, 182, 212, 0.90)');  // Cyan
+    pGrad.addColorStop(0.65, 'rgba(16, 185, 129, 0.95)'); // Emerald Green
+    pGrad.addColorStop(0.80, 'rgba(234, 179, 8, 1.0)');   // Amber Gold
+    pGrad.addColorStop(0.92, 'rgba(249, 115, 22, 1.0)');  // Hot Orange
+    pGrad.addColorStop(1.0, 'rgba(239, 68, 68, 1.0)');    // Intense Crimson
 
     pCtx.fillStyle = pGrad;
     pCtx.fillRect(0, 0, 256, 1);
     const palette = pCtx.getImageData(0, 0, 256, 1).data;
 
+    // 3. Colorize pixels based on alpha intensity
+    const imgData = offCtx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
     for (let i = 0; i < data.length; i += 4) {
       const alpha = data[i + 3];
       if (alpha > 0) {
         const offset = alpha * 4;
-        data[i] = palette[offset];         // R
-        data[i + 1] = palette[offset + 1]; // G
-        data[i + 2] = palette[offset + 2]; // B
-        data[i + 3] = Math.round(palette[offset + 3] * opacity); // A
+        data[i] = palette[offset];         // Red
+        data[i + 1] = palette[offset + 1]; // Green
+        data[i + 2] = palette[offset + 2]; // Blue
+        data[i + 3] = Math.round(palette[offset + 3] * opacity); // Alpha
       }
     }
 
     ctx.putImageData(imgData, 0, 0);
-  }, [normalizedClicks, viewMode, radius, opacity, viewportBounds]);
+  }, [normalizedClicks, viewMode, radius, opacity, detectedViewport]);
 
   // Compute Grid Matrix for Grid Mode
   const gridMatrix = useMemo(() => {
-    if (viewMode !== 'grid') return [];
-    const cols = 24;
-    const rows = 16;
-    const cellWidth = viewportBounds.width / cols;
-    const cellHeight = viewportBounds.height / rows;
+    if (viewMode !== 'grid') return null;
+    const cols = 28;
+    const rows = 18;
+    const cellW = detectedViewport.width / cols;
+    const cellH = detectedViewport.height / rows;
 
     const matrix = Array.from({ length: rows }, () => Array(cols).fill(0));
-    let maxCellCount = 0;
+    let maxCount = 0;
 
     normalizedClicks.forEach(({ x, y, weight }) => {
-      const col = Math.min(Math.floor(x / cellWidth), cols - 1);
-      const row = Math.min(Math.floor(y / cellHeight), rows - 1);
+      const col = Math.min(Math.floor(x / cellW), cols - 1);
+      const row = Math.min(Math.floor(y / cellH), rows - 1);
       if (col >= 0 && row >= 0) {
         matrix[row][col] += weight;
-        if (matrix[row][col] > maxCellCount) {
-          maxCellCount = matrix[row][col];
-        }
+        if (matrix[row][col] > maxCount) maxCount = matrix[row][col];
       }
     });
 
-    return { matrix, maxCellCount, cols, rows };
-  }, [normalizedClicks, viewMode, viewportBounds]);
+    return { matrix, maxCount, cols, rows };
+  }, [normalizedClicks, viewMode, detectedViewport]);
 
+  // Mouse Move with Coordinate Scaling Calculation
   const handleMouseMove = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    if (!stageRef.current) return;
+    const rect = stageRef.current.getBoundingClientRect();
+    const currentScale = computedScale || 1;
 
-    // Find nearby clicks within 25px
-    const nearby = normalizedClicks.filter(
-      (c) => Math.hypot(c.x - x, c.y - y) <= 25
-    );
+    // Translate client coordinates by current CSS transform scale
+    const rawX = (e.clientX - rect.left) / currentScale;
+    const rawY = (e.clientY - rect.top) / currentScale;
+
+    const x = Math.round(Math.max(0, Math.min(detectedViewport.width, rawX)));
+    const y = Math.round(Math.max(0, Math.min(detectedViewport.height, rawY)));
+
+    // Find nearby clicks within 35px radius in native coordinates
+    const nearby = normalizedClicks.filter((c) => Math.hypot(c.x - x, c.y - y) <= 35);
+    const density = nearby.reduce((acc, c) => acc + c.weight, 0);
 
     setHoverInfo({
-      x,
-      y,
-      nearbyCount: nearby.reduce((acc, c) => acc + c.weight, 0),
+      nativeX: x,
+      nativeY: y,
+      screenX: Math.round(e.clientX - rect.left),
+      screenY: Math.round(e.clientY - rect.top),
+      nearbyCount: density,
     });
   };
 
@@ -177,225 +263,393 @@ export default function Heatmap({
   };
 
   return (
-    <div className="heatmap-container">
-      {/* View Options & Stats */}
-      <div className="heatmap-toolbar-card">
-        <div className="heatmap-stats-strip">
-          <div className="stats-chip">
-            <span className="stats-chip-label">Tracked Page:</span>
-            <span className="stats-chip-value mono" style={{ fontSize: '0.85rem', color: '#2563eb' }}>
-              {pageUrl || 'None'}
-            </span>
+    <div className="heatmap-container" ref={containerRef}>
+      {/* 1. Hotspot Summary Metrics Cards */}
+      <div className="heatmap-metrics-grid">
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-label">Total Clicks Recorded</span>
+            <div className="metric-icon-bubble blue">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="m10 15 5-3-5-3v6Z" fill="currentColor" />
+              </svg>
+            </div>
           </div>
-
-          <div className="stats-chip">
-            <span className="stats-chip-label">Total Clicks:</span>
-            <span className="stats-chip-value">{totalClicksCount}</span>
-          </div>
-
-          <div className="stats-chip">
-            <span className="stats-chip-label">Unique Click Points:</span>
-            <span className="stats-chip-value">{normalizedClicks.length}</span>
-          </div>
-
-          <div className="stats-chip">
-            <span className="stats-chip-label">Viewport Area:</span>
-            <span className="stats-chip-value mono">
-              {viewportBounds.width} × {viewportBounds.height} px
-            </span>
+          <div className="metric-value">{totalClicksCount.toLocaleString()}</div>
+          <div className="metric-footer">
+            <span className="pulse-indicator"></span>
+            <span>Across {normalizedClicks.length} distinct coordinates</span>
           </div>
         </div>
 
-        <div className="view-controls-row">
-          <div className="mode-toggle-group">
-            <button
-              type="button"
-              className={`mode-btn ${viewMode === 'density' ? 'active' : ''}`}
-              onClick={() => setViewMode('density')}
-            >
-              Density Heatmap
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${viewMode === 'scatter' ? 'active' : ''}`}
-              onClick={() => setViewMode('scatter')}
-            >
-              Scatter Points ({normalizedClicks.length})
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              onClick={() => setViewMode('grid')}
-            >
-              Grid Matrix
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-            {viewMode === 'density' && (
-              <div className="slider-group">
-                <label htmlFor="radius-slider">Radius ({radius}px):</label>
-                <input
-                  id="radius-slider"
-                  type="range"
-                  min="15"
-                  max="60"
-                  value={radius}
-                  onChange={(e) => setRadius(Number(e.target.value))}
-                  className="slider-input"
-                />
-              </div>
-            )}
-
-            <div className="slider-group">
-              <label htmlFor="opacity-slider">Opacity ({Math.round(opacity * 100)}%):</label>
-              <input
-                id="opacity-slider"
-                type="range"
-                min="0.2"
-                max="1"
-                step="0.05"
-                value={opacity}
-                onChange={(e) => setOpacity(Number(e.target.value))}
-                className="slider-input"
-              />
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-label">Peak Density Hotspot</span>
+            <div className="metric-icon-bubble red">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
             </div>
+          </div>
+          <div className="metric-value">
+            {topHotspots.length > 0 ? `${topHotspots[0].count} clicks` : 'None'}
+          </div>
+          <div className="metric-footer mono">
+            {topHotspots.length > 0 ? `At X: ${topHotspots[0].x}px, Y: ${topHotspots[0].y}px` : 'No clicks logged yet'}
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-label">Viewport Canvas Resolution</span>
+            <div className="metric-icon-bubble green">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect width="20" height="14" x="2" y="3" rx="2" />
+                <line x1="8" x2="16" y1="21" y2="21" />
+                <line x1="12" x2="12" y1="17" y2="21" />
+              </svg>
+            </div>
+          </div>
+          <div className="metric-value mono">
+            {detectedViewport.width} × {detectedViewport.height}
+          </div>
+          <div className="metric-footer">
+            <span>Scale: {Math.round(computedScale * 100)}% ({scaleMode === 'fit' ? 'Auto-Fit' : 'Manual'})</span>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-label">Live Sync Status</span>
+            <div className="metric-icon-bubble purple">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+            </div>
+          </div>
+          <div className="metric-value" style={{ fontSize: '1.25rem', color: '#10b981' }}>
+            Live Active
+          </div>
+          <div className="metric-footer">
+            {lastUpdated ? `Synced: ${lastUpdated}` : 'Syncing every 3 seconds...'}
           </div>
         </div>
       </div>
 
-      {/* Viewport Frame */}
-      <div className="viewport-frame">
-        {/* Mock Browser Header */}
-        <div className="viewport-topbar">
-          <div className="browser-dots">
-            <span className="b-dot red"></span>
-            <span className="b-dot yellow"></span>
-            <span className="b-dot green"></span>
-          </div>
-          <div className="viewport-address-bar" title={pageUrl}>
-            https://analytics.view{pageUrl.startsWith('/') ? pageUrl : `/${pageUrl}`}
-          </div>
-          <div className="viewport-meta">
-            Desktop Viewport ({viewportBounds.width} × {viewportBounds.height})
+      {/* 2. Interactive Control Bar */}
+      <div className="heatmap-control-bar">
+        {/* View Modes */}
+        <div className="control-section">
+          <span className="control-label">Visualization:</span>
+          <div className="pill-group">
+            <button
+              type="button"
+              className={`pill-btn ${viewMode === 'hybrid' ? 'active' : ''}`}
+              onClick={() => setViewMode('hybrid')}
+              title="Combined thermal heat glow with point markers"
+            >
+              Hybrid (Glow + Dots)
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${viewMode === 'density' ? 'active' : ''}`}
+              onClick={() => setViewMode('density')}
+              title="Smooth thermal density gradient"
+            >
+              Thermal Heat
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${viewMode === 'scatter' ? 'active' : ''}`}
+              onClick={() => setViewMode('scatter')}
+              title="Exact click pinpoint scatter"
+            >
+              Click Dots ({normalizedClicks.length})
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="Matrix grid density"
+            >
+              Grid Heat
+            </button>
           </div>
         </div>
 
-        {/* Viewport Canvas Stage */}
-        <div className="viewport-stage-wrapper">
+        {/* Responsive Scale Presets */}
+        <div className="control-section">
+          <span className="control-label">Scale:</span>
+          <div className="pill-group">
+            <button
+              type="button"
+              className={`pill-btn ${scaleMode === 'fit' ? 'active' : ''}`}
+              onClick={() => setScaleMode('fit')}
+              title="Fit entire viewport to dashboard width"
+            >
+              Fit Screen
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${scaleMode === '100' ? 'active' : ''}`}
+              onClick={() => setScaleMode('100')}
+              title="100% Native 1:1 Pixel Size"
+            >
+              100%
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${scaleMode === '75' ? 'active' : ''}`}
+              onClick={() => setScaleMode('75')}
+            >
+              75%
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${scaleMode === '50' ? 'active' : ''}`}
+              onClick={() => setScaleMode('50')}
+            >
+              50%
+            </button>
+          </div>
+        </div>
+
+        {/* Sliders: Radius & Opacity */}
+        <div className="control-section sliders">
+          <div className="slider-item">
+            <label htmlFor="radius-slider">Radius: {radius}px</label>
+            <input
+              id="radius-slider"
+              type="range"
+              min="16"
+              max="70"
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="slider-item">
+            <label htmlFor="opacity-slider">Opacity: {Math.round(opacity * 100)}%</label>
+            <input
+              id="opacity-slider"
+              type="range"
+              min="0.2"
+              max="1"
+              step="0.05"
+              value={opacity}
+              onChange={(e) => setOpacity(Number(e.target.value))}
+            />
+          </div>
+
+          <label className="checkbox-toggle" title="Show simulated webpage layout underneath heatmap">
+            <input
+              type="checkbox"
+              checked={showWireframe}
+              onChange={(e) => setShowWireframe(e.target.checked)}
+            />
+            <span>Page Wireframe</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 3. Viewport Container & Canvas Frame */}
+      <div className="viewport-browser-window">
+        {/* Browser Mock Header */}
+        <div className="browser-header">
+          <div className="window-dots">
+            <span className="dot dot-close"></span>
+            <span className="dot dot-min"></span>
+            <span className="dot dot-max"></span>
+          </div>
+
+          <div className="address-bar-box">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" color="#10b981">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span className="address-text">{pageUrl || 'https://demo-store.causalfunnel.com/demo'}</span>
+          </div>
+
+          <div className="viewport-badge mono">
+            {detectedViewport.width} × {detectedViewport.height} px
+          </div>
+        </div>
+
+        {/* Canvas Scroll & Scaled Wrapper */}
+        <div className="viewport-canvas-wrapper">
           <div
-            ref={containerRef}
-            className="viewport-stage"
-            style={{ width: `${viewportBounds.width}px`, height: `${viewportBounds.height}px` }}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
+            className="viewport-scale-outer"
+            style={{
+              width: `${Math.round(detectedViewport.width * computedScale)}px`,
+              height: `${Math.round(detectedViewport.height * computedScale)}px`,
+            }}
           >
-            {/* 1. Density Canvas Mode */}
-            {viewMode === 'density' && (
-              <canvas
-                ref={canvasRef}
-                className="heatmap-canvas"
-              />
-            )}
-
-            {/* 2. Scatter Points Mode */}
-            {viewMode === 'scatter' && (
-              <>
-                {normalizedClicks.map((click, idx) => (
-                  <div
-                    key={idx}
-                    className="scatter-dot"
-                    style={{
-                      left: `${click.x}px`,
-                      top: `${click.y}px`,
-                      opacity,
-                    }}
-                    title={`Click #${idx + 1}: X=${click.x}, Y=${click.y} (${click.weight} hit${click.weight > 1 ? 's' : ''})`}
-                  />
-                ))}
-              </>
-            )}
-
-            {/* 3. Grid Matrix Mode */}
-            {viewMode === 'grid' && gridMatrix.matrix && (
-              <div className="grid-heatmap">
-                {gridMatrix.matrix.map((row, rIdx) =>
-                  row.map((cellCount, cIdx) => {
-                    const ratio = gridMatrix.maxCellCount > 0 ? cellCount / gridMatrix.maxCellCount : 0;
-                    const bgColor = cellCount > 0 ? getColorForDensity(ratio) : 'transparent';
-                    return (
-                      <div
-                        key={`${rIdx}-${cIdx}`}
-                        className="grid-cell"
-                        style={{
-                          backgroundColor: bgColor,
-                          opacity,
-                        }}
-                        title={`Grid [${cIdx}, ${rIdx}]: ${cellCount} clicks`}
-                      >
-                        {cellCount > 0 ? cellCount : ''}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-
-            {/* Interactive Hover Tooltip */}
-            {hoverInfo && (
-              <div
-                className="hover-tooltip"
-                style={{
-                  left: `${hoverInfo.x}px`,
-                  top: `${hoverInfo.y}px`,
-                }}
-              >
-                X: {hoverInfo.x}px, Y: {hoverInfo.y}px
-                {hoverInfo.nearbyCount > 0 && (
-                  <div style={{ marginTop: '2px', color: '#fca5a5' }}>
-                    Density: {hoverInfo.nearbyCount} click{hoverInfo.nearbyCount > 1 ? 's' : ''} in region
+            <div
+              ref={stageRef}
+              className="viewport-stage"
+              style={{
+                width: `${detectedViewport.width}px`,
+                height: `${detectedViewport.height}px`,
+                transform: `scale(${computedScale})`,
+                transformOrigin: 'top left',
+              }}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
+              {/* Optional Underlying Demo Wireframe to give visual context to clicks */}
+              {showWireframe && (
+                <div className="wireframe-page-overlay">
+                  {/* Wireframe Nav */}
+                  <div className="wireframe-nav">
+                    <div className="wf-brand">STORE FRONT</div>
+                    <div className="wf-links">
+                      <span className="wf-link">Catalog</span>
+                      <span className="wf-link">Electronics</span>
+                      <span className="wf-link">Sale</span>
+                    </div>
+                    <div className="wf-cart-btn">Cart (0)</div>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Empty State Overlay */}
-            {!isLoading && normalizedClicks.length === 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.75rem',
-                  color: 'var(--text-muted)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                }}
-              >
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>No click interactions recorded yet</div>
-                <div style={{ fontSize: '0.85rem' }}>No user clicks found for "{pageUrl}" in this timeframe.</div>
-              </div>
-            )}
+                  {/* Wireframe Hero Banner */}
+                  <div className="wireframe-hero">
+                    <div className="wf-hero-tag">Special Promotion</div>
+                    <div className="wf-hero-title">Exclusive Summer Deals — 50% Off</div>
+                    <div className="wf-hero-btn">Shop Collection Now</div>
+                  </div>
+
+                  {/* Wireframe Product Grid */}
+                  <div className="wireframe-products">
+                    {[1, 2, 3, 4].map((id) => (
+                      <div key={id} className="wf-product-card">
+                        <div className="wf-product-img">Item #{id} Preview</div>
+                        <div className="wf-product-title">Premium Product {id}</div>
+                        <div className="wf-product-price">$99.00</div>
+                        <div className="wf-buy-btn">Add to Cart</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 1. Canvas Layer for Thermal Heat */}
+              {(viewMode === 'density' || viewMode === 'hybrid') && (
+                <canvas ref={canvasRef} className="heatmap-canvas" />
+              )}
+
+              {/* 2. Top Hotspots Radar Rings */}
+              {topHotspots.map((hotspot, idx) => (
+                <div
+                  key={`pulse-${idx}`}
+                  className="hotspot-pulse-ring"
+                  style={{
+                    left: `${hotspot.x}px`,
+                    top: `${hotspot.y}px`,
+                  }}
+                  title={`Hotspot #${idx + 1}: ${hotspot.count} clicks`}
+                >
+                  <span className="hotspot-core-dot">#{idx + 1}</span>
+                </div>
+              ))}
+
+              {/* 3. Scatter Points Layer */}
+              {(viewMode === 'scatter' || viewMode === 'hybrid') && (
+                <>
+                  {normalizedClicks.map((click, idx) => (
+                    <div
+                      key={`dot-${idx}`}
+                      className="scatter-click-dot"
+                      style={{
+                        left: `${click.x}px`,
+                        top: `${click.y}px`,
+                        opacity: viewMode === 'hybrid' ? 0.7 : opacity,
+                      }}
+                      title={`Click #${idx + 1}: (${click.x}, ${click.y})`}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* 4. Grid Matrix Mode */}
+              {viewMode === 'grid' && gridMatrix && gridMatrix.matrix && (
+                <div className="grid-heatmap-overlay">
+                  {gridMatrix.matrix.map((row, rIdx) =>
+                    row.map((count, cIdx) => {
+                      const ratio = gridMatrix.maxCount > 0 ? count / gridMatrix.maxCount : 0;
+                      let bg = 'transparent';
+                      if (count > 0) {
+                        if (ratio < 0.25) bg = 'rgba(59, 130, 246, 0.4)';
+                        else if (ratio < 0.5) bg = 'rgba(6, 182, 212, 0.6)';
+                        else if (ratio < 0.75) bg = 'rgba(234, 179, 8, 0.75)';
+                        else bg = 'rgba(239, 68, 68, 0.85)';
+                      }
+                      return (
+                        <div
+                          key={`${rIdx}-${cIdx}`}
+                          className="grid-heat-cell"
+                          style={{ backgroundColor: bg }}
+                          title={`Grid [${cIdx}, ${rIdx}]: ${count} clicks`}
+                        >
+                          {count > 0 ? count : ''}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* 5. Interactive Hover Tooltip */}
+              {hoverInfo && (
+                <div
+                  className="canvas-hover-card"
+                  style={{
+                    left: `${hoverInfo.nativeX}px`,
+                    top: `${hoverInfo.nativeY}px`,
+                  }}
+                >
+                  <div className="hover-card-coords">
+                    X: {hoverInfo.nativeX}px, Y: {hoverInfo.nativeY}px
+                  </div>
+                  {hoverInfo.nearbyCount > 0 ? (
+                    <div className="hover-card-density">
+                      {hoverInfo.nearbyCount} click{hoverInfo.nearbyCount > 1 ? 's' : ''} in this region
+                    </div>
+                  ) : (
+                    <div className="hover-card-empty">No clicks recorded here</div>
+                  )}
+                </div>
+              )}
+
+              {/* Empty state notice if no clicks */}
+              {!isLoading && normalizedClicks.length === 0 && (
+                <div className="canvas-empty-state">
+                  <div className="empty-icon-circle">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <div className="empty-state-title">No click interactions recorded yet</div>
+                  <div className="empty-state-sub">
+                    Click anywhere on the demo store page to generate live interaction events.
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Heatmap Legend */}
-        <div className="heatmap-legend-card">
-          <div className="legend-scale">
-            <span>Low Density</span>
-            <div className="gradient-bar"></div>
-            <span>High Density</span>
+        {/* Heatmap Legend Bar */}
+        <div className="heatmap-footer-legend">
+          <div className="legend-gradient-wrap">
+            <span className="legend-label">Low Heat</span>
+            <div className="thermal-gradient-bar"></div>
+            <span className="legend-label hot">High Density (Hotspot)</span>
           </div>
 
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Hover cursor over canvas to inspect exact pixel coordinates
+          <div className="legend-hint">
+            <span>Hover cursor over canvas to inspect exact pixel coordinates.</span>
           </div>
         </div>
       </div>

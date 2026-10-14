@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getPages, getHeatmap } from '../utils/api';
 import PageSelector from '../components/PageSelector';
@@ -7,6 +7,7 @@ import Heatmap from '../components/Heatmap';
 export default function HeatmapPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [pages, setPages] = useState([]);
+  const [pageStats, setPageStats] = useState([]);
   const [selectedPage, setSelectedPage] = useState(searchParams.get('page_url') || '');
   const [clicks, setClicks] = useState([]);
   const [totalClicks, setTotalClicks] = useState(0);
@@ -16,15 +17,22 @@ export default function HeatmapPage() {
   const [pagesError, setPagesError] = useState(null);
   const [heatmapError, setHeatmapError] = useState(null);
 
+  // Live Auto-Sync states (real-time updates)
+  const [autoSync, setAutoSync] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  // Keep a ref of selectedPage for interval callbacks
+  const selectedPageRef = useRef(selectedPage);
+  selectedPageRef.current = selectedPage;
+
   // Fetch available pages
-  const fetchAvailablePages = async () => {
-    setIsLoadingPages(true);
+  const fetchAvailablePages = async (silent = false) => {
+    if (!silent) setIsLoadingPages(true);
     setPagesError(null);
     try {
       const data = await getPages();
-      const list = Array.isArray(data)
-        ? data
-        : data.pages || data.data || [];
+      const list = Array.isArray(data) ? data : data.pages || data.data || [];
+      const stats = data.stats || [];
 
       // Normalize list items into strings
       const stringUrls = list.map((item) => {
@@ -33,38 +41,45 @@ export default function HeatmapPage() {
       });
 
       setPages(stringUrls);
+      setPageStats(stats);
 
-      // If no page is currently selected, select the first available page
+      // If no page is currently selected, select the first available page with clicks or first page
       const currentParam = searchParams.get('page_url');
       if (stringUrls.length > 0) {
-        if (currentParam && stringUrls.includes(currentParam)) {
+        if (currentParam && (stringUrls.includes(currentParam) || currentParam === 'all')) {
           setSelectedPage(currentParam);
-        } else if (!selectedPage || !stringUrls.includes(selectedPage)) {
-          setSelectedPage(stringUrls[0]);
-          setSearchParams({ page_url: stringUrls[0] }, { replace: true });
+        } else if (!selectedPageRef.current || (!stringUrls.includes(selectedPageRef.current) && selectedPageRef.current !== 'all')) {
+          // Prefer page that has most clicks from stats
+          const bestPage = stats.length > 0 && stats[0]._id ? stats[0]._id : stringUrls[0];
+          setSelectedPage(bestPage);
+          setSearchParams({ page_url: bestPage }, { replace: true });
         }
       }
     } catch (err) {
-      console.error('Failed to fetch pages:', err);
-      setPagesError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to load tracked pages.');
+      if (!silent) {
+        console.error('Failed to fetch pages:', err);
+        setPagesError(
+          err.userMessage ||
+          err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          'Failed to load tracked pages.'
+        );
+      }
     } finally {
-      setIsLoadingPages(false);
+      if (!silent) setIsLoadingPages(false);
     }
   };
 
-  useEffect(() => {
-    fetchAvailablePages();
-  }, []);
-
-  // Fetch heatmap clicks when selectedPage changes
-  const fetchHeatmapData = async (page) => {
+  // Fetch heatmap clicks for a page
+  const fetchHeatmapData = async (page, silent = false) => {
     if (!page) {
       setClicks([]);
       setTotalClicks(0);
       return;
     }
 
-    setIsLoadingHeatmap(true);
+    if (!silent) setIsLoadingHeatmap(true);
     setHeatmapError(null);
     try {
       const data = await getHeatmap(page);
@@ -83,21 +98,51 @@ export default function HeatmapPage() {
 
       setClicks(points);
       setTotalClicks(total);
+      setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
-      console.error(`Failed to fetch heatmap data for page ${page}:`, err);
-      setHeatmapError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || `Failed to load heatmap for ${page}`);
-      setClicks([]);
-      setTotalClicks(0);
+      if (!silent) {
+        console.error(`Failed to fetch heatmap data for page ${page}:`, err);
+        setHeatmapError(
+          err.userMessage ||
+          err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          `Failed to load heatmap for ${page}`
+        );
+        setClicks([]);
+        setTotalClicks(0);
+      }
     } finally {
-      setIsLoadingHeatmap(false);
+      if (!silent) setIsLoadingHeatmap(false);
     }
   };
 
+  // Initial load of pages list
+  useEffect(() => {
+    fetchAvailablePages();
+  }, []);
+
+  // Fetch clicks whenever selectedPage changes
   useEffect(() => {
     if (selectedPage) {
       fetchHeatmapData(selectedPage);
     }
   }, [selectedPage]);
+
+  // Live Auto-Sync polling every 3 seconds
+  useEffect(() => {
+    if (!autoSync) return;
+
+    const interval = setInterval(() => {
+      if (selectedPageRef.current) {
+        fetchHeatmapData(selectedPageRef.current, true);
+      }
+      // Also silently refresh page list every 9 seconds
+      fetchAvailablePages(true);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [autoSync]);
 
   const handleSelectPage = (pageUrl) => {
     setSelectedPage(pageUrl);
@@ -106,34 +151,79 @@ export default function HeatmapPage() {
 
   return (
     <div className="page-wrapper">
+      {/* Header with Title and Live Auto-Sync Toggle */}
       <div className="page-header">
         <div>
           <h1 className="page-title">User Click Heatmap</h1>
-          <p className="page-subtitle">Visualize spatial click density and user interactions across pages</p>
+          <p className="page-subtitle">
+            Live spatial density visualization and user interaction hotspots
+          </p>
         </div>
 
-        {selectedPage && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => fetchHeatmapData(selectedPage)}
-            disabled={isLoadingHeatmap}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+          {/* Live Auto-Sync Toggle */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: '#ffffff',
+              padding: '0.4rem 0.75rem',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+            }}
           >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              className={isLoadingHeatmap ? 'spinner' : ''}
-              style={{ width: '15px', height: '15px', borderWidth: '2px' }}
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: autoSync ? '#10b981' : '#94a3b8',
+                display: 'inline-block',
+              }}
+            ></span>
+            <span>Live Auto-Sync</span>
+            <input
+              type="checkbox"
+              checked={autoSync}
+              onChange={(e) => setAutoSync(e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: 'var(--primary, #2563eb)' }}
+              title="Toggle live 3-second data polling"
+            />
+            {lastUpdated && (
+              <span style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.75rem', marginLeft: '4px' }}>
+                ({lastUpdated})
+              </span>
+            )}
+          </div>
+
+          {selectedPage && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                fetchHeatmapData(selectedPage);
+                fetchAvailablePages(true);
+              }}
+              disabled={isLoadingHeatmap}
             >
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Refresh Heatmap
-          </button>
-        )}
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                className={isLoadingHeatmap ? 'spinner' : ''}
+              >
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+              Refresh
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Pages loading error banner */}
@@ -143,19 +233,20 @@ export default function HeatmapPage() {
             <strong>Error loading pages list: </strong>
             <span className="error-message">{pagesError}</span>
           </div>
-          <button type="button" className="btn btn-sm btn-secondary" onClick={fetchAvailablePages}>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => fetchAvailablePages()}>
             Retry
           </button>
         </div>
       )}
 
-      {/* Page Selector */}
+      {/* Page Selector Bar */}
       <PageSelector
         pages={pages}
+        pageStats={pageStats}
         selectedPage={selectedPage}
         onSelectPage={handleSelectPage}
         isLoading={isLoadingPages}
-        onRefresh={fetchAvailablePages}
+        onRefresh={() => fetchAvailablePages()}
       />
 
       {/* Heatmap fetch error banner */}
@@ -176,12 +267,12 @@ export default function HeatmapPage() {
       )}
 
       {/* Heatmap View or Placeholder */}
-      <div style={{ marginTop: '1.5rem' }}>
-        {isLoadingHeatmap ? (
+      <div style={{ marginTop: '1.25rem' }}>
+        {isLoadingHeatmap && clicks.length === 0 ? (
           <div className="state-box">
             <div className="spinner"></div>
             <div className="state-title">Rendering heatmap data...</div>
-            <div className="state-desc">Fetching click coordinates for page: {selectedPage}</div>
+            <div className="state-desc">Fetching click coordinates for: {selectedPage}</div>
           </div>
         ) : !selectedPage ? (
           <div className="state-box">
@@ -199,6 +290,8 @@ export default function HeatmapPage() {
             totalClicks={totalClicks}
             pageUrl={selectedPage}
             isLoading={isLoadingHeatmap}
+            lastUpdated={lastUpdated}
+            onRefresh={() => fetchHeatmapData(selectedPage)}
           />
         )}
       </div>
