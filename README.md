@@ -98,12 +98,12 @@ npm run dev
 ```
 Dashboard runs at http://localhost:5173
 
-### 6. Generate Test Data
+### 6. Generate Test Data & Live Online Testing
 
-Open `tracking/demo.html` in a browser:
-- You can simply double-click the file, or serve it locally
-- Click around the demo e-commerce page — each click and page view is tracked
-- Then go to the dashboard (http://localhost:5173) to see the data
+- **Online Testing (Netlify)**: Once deployed, the Demo Store is hosted directly on your domain at `/demo` (or `/demo.html`). Anyone visiting your dashboard can click **"Live Demo Store ↗"** in the sidebar to open the store in a new tab, click items, and see the dashboard update in real-time.
+- **Local Testing**: Open `tracking/demo.html` in your browser (or visit `http://localhost:5000/demo`).
+- Click products, buttons, or banners — each interaction is tracked and batched.
+- Switch to the dashboard to inspect the recorded user session, journey timeline, and click heatmap.
 
 ## API Endpoints
 
