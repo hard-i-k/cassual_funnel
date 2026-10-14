@@ -58,8 +58,16 @@ app.get('/', (req, res) => {
       sessionEvents: 'GET /api/sessions/:sessionId/events',
       heatmap: 'GET /api/heatmap?page_url={url}',
       pages: 'GET /api/pages',
+      demo: 'GET /demo',
     },
   });
+});
+
+// Serve tracking files and demo webpage
+const path = require('path');
+app.use('/demo', express.static(path.join(__dirname, '../tracking')));
+app.get('/demo', (req, res) => {
+  res.sendFile(path.join(__dirname, '../tracking/demo.html'));
 });
 
 // Database guard middleware: prevents requests from hanging if MongoDB is not connected
