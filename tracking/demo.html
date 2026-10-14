@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo E-Commerce Store — CausalFunnel Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────── */
+    header {
+      background: #0f172a;
+      color: white;
+      padding: 1rem 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+    header nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    header nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.15s;
+    }
+    header nav a:hover { color: #ffffff; }
+
+    .dashboard-link {
+      background: #4f46e5;
+      color: #ffffff !important;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-weight: 600 !important;
+      transition: background 0.15s;
+    }
+    .dashboard-link:hover {
+      background: #4338ca !important;
+    }
+
+    /* ── Hero Banner ─────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: white;
+      text-align: center;
+      padding: 4.5rem 1.5rem;
+    }
+    .hero h2 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+    .hero-btn {
+      background: #ffffff;
+      color: #4f46e5;
+      border: none;
+      padding: 0.875rem 2.25rem;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 9999px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .hero-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    /* ── Product Grid ────────────────── */
+    .products-container {
+      max-width: 1200px;
+      margin: 3rem auto;
+      padding: 0 1.5rem;
+      flex: 1;
+    }
+    .products-header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .products-header h3 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .products-header p {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-top: 0.35rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.75rem;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px -10px rgba(0,0,0,0.12);
+      border-color: #cbd5e1;
+    }
+    .card-img {
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3.5rem;
+    }
+    .card-body {
+      padding: 1.25rem;
+    }
+    .card-body h4 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.25rem;
+    }
+    .card-body .price {
+      color: #4f46e5;
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+    .card-body .btn-cart {
+      display: block;
+      width: 100%;
+      margin-top: 1rem;
+      background: #0f172a;
+      color: white;
+      border: none;
+      padding: 0.625rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .card-body .btn-cart:hover {
+      background: #4f46e5;
+    }
+
+    /* ── Click Feedback Ripple ───────── */
+    .click-ripple {
+      position: fixed;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.4);
+      border: 2px solid #ef4444;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(1);
+      animation: ripple 0.6s ease-out forwards;
+      z-index: 9999;
+    }
+    @keyframes ripple {
+      0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+    }
+
+    /* ── Footer ──────────────────────── */
+    footer {
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-top: auto;
+    }
+
+    /* ── Floating Debug HUD ─────────── */
+    .tracker-hud {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(8px);
+      color: #ffffff;
+      padding: 0.875rem 1.25rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+      font-size: 0.8125rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 10000;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 320px;
+    }
+    .hud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .hud-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: #10b981;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .hud-session {
+      font-family: 'JetBrains Mono', monospace;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      word-break: break-all;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+    .hud-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+    .hud-btn {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.25rem 0.625rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: background 0.15s;
+    }
+    .hud-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span>🛍️</span> DemoShop E-Commerce
+    </div>
+    <nav>
+      <a href="#featured">Products</a>
+      <a href="#about">About</a>
+      <a href="http://localhost:5173" target="_blank" class="dashboard-link cf-ignore-track">
+        Open Analytics Dashboard ↗
+      </a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h2>Summer Collection 2026</h2>
+    <p>Every click and page visit is automatically tracked and analyzed in real-time by the CausalFunnel Analytics script.</p>
+    <button class="hero-btn" id="hero-cta-btn">Explore Deals Now</button>
+  </section>
+
+  <main class="products-container" id="featured">
+    <div class="products-header">
+      <h3>Featured Products</h3>
+      <p>Click any product, image, or button to generate spatial interaction click events</p>
+    </div>
+
+    <div class="grid">
+      <div class="card" id="product-1">
+        <div class="card-img" style="background:#fef3c7;">👟</div>
+        <div class="card-body">
+          <h4>Pro Running Shoes</h4>
+          <p class="price">$129.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card" id="product-2">
+        <div class="card-img" style="background:#dbeafe;">⌚</div>
+        <div class="card-body">
+          <h4>Smart Fitness Watch</h4>
+          <p class="price">$249.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card" id="product-3">
+        <div class="card-img" style="background:#fce7f3;">👜</div>
+        <div class="card-body">
+          <h4>Leather Handbag</h4>
+          <p class="price">$189.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card" id="product-4">
+        <div class="card-img" style="background:#d1fae5;">🎧</div>
+        <div class="card-body">
+          <h4>Wireless Headphones</h4>
+          <p class="price">$89.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card" id="product-5">
+        <div class="card-img" style="background:#ede9fe;">📱</div>
+        <div class="card-body">
+          <h4>Protective Phone Case</h4>
+          <p class="price">$29.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card" id="product-6">
+        <div class="card-img" style="background:#fef9c3;">🕶️</div>
+        <div class="card-body">
+          <h4>Polarized Sunglasses</h4>
+          <p class="price">$99.99</p>
+          <button class="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="about">
+    <p>&copy; 2026 DemoShop — CausalFunnel Full Stack Engineer Assignment Testbed</p>
+  </footer>
+
+  <!-- Floating HUD with session info and reset option -->
+  <div class="tracker-hud cf-ignore-track">
+    <div class="hud-header">
+      <div class="hud-status">
+        <span class="status-dot"></span>
+        Tracker Active
+      </div>
+      <span id="click-counter" style="color: #cbd5e1; font-size: 0.75rem;">0 clicks</span>
+    </div>
+    <div class="hud-session" id="hud-session-display">Session: Loading...</div>
+    <div class="hud-actions">
+      <button class="hud-btn" id="new-session-btn" title="Clear current session and start a new one">
+        🔄 New Session
+      </button>
+      <button class="hud-btn" id="flush-btn" title="Immediately send queued events">
+        ⚡ Flush Now
+      </button>
+    </div>
+  </div>
+
+  <!-- ✅ CausalFunnel Tracking Script -->
+  <script src="tracker.js" data-api="http://localhost:5000"></script>
+
+  <!-- Visual click indicator & HUD script -->
+  <script>
+    let clickCount = 0;
+
+    // Visual ripple effect on click
+    window.onCausalFunnelEvent = function(event) {
+      if (event.event_type === 'click') {
+        clickCount++;
+        const counterEl = document.getElementById('click-counter');
+        if (counterEl) counterEl.textContent = clickCount + (clickCount === 1 ? ' click' : ' clicks');
+
+        const ripple = document.createElement('div');
+        ripple.className = 'click-ripple cf-ignore-track';
+        ripple.style.left = event.click_x + 'px';
+        ripple.style.top = event.click_y + 'px';
+        document.body.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+      }
+    };
+
+    // Update HUD with Session ID
+    setTimeout(() => {
+      if (window.CausalFunnelTracker) {
+        const sid = window.CausalFunnelTracker.getSessionId();
+        const el = document.getElementById('hud-session-display');
+        if (el) el.textContent = 'Session: ' + sid;
+      }
+    }, 200);
+
+    // New Session button
+    document.getElementById('new-session-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      localStorage.removeItem('cf_session_id');
+      document.cookie = 'cf_session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      window.location.reload();
+    });
+
+    // Flush button
+    document.getElementById('flush-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (window.CausalFunnelTracker) {
+        window.CausalFunnelTracker.flush();
+      }
+    });
+  </script>
+
+</body>
+</html>
