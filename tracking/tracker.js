@@ -4,11 +4,13 @@
  * A lightweight JavaScript tracking script that captures user interactions
  * (page views and clicks) and sends them to the analytics backend.
  * 
- * Requirements met:
+ * Features:
  *  - Tracks 'page_view' and 'click' events.
  *  - Stores session_id in localStorage with cookie fallback.
  *  - Captures: session_id, event_type, page_url, timestamp, click x/y coordinates,
  *    and viewport dimensions.
+ *  - Smart API resolution: Query parameter `?api=`, localStorage override,
+ *    script tag attribute `data-api`, or auto localhost/origin fallback.
  *  - Reliable delivery with batching, keepalive fetch, and sendBeacon fallback on page unload.
  */
 (function () {
@@ -16,18 +18,55 @@
 
   // ── Configuration ──────────────────────────────────────────────
   var STORAGE_KEY = 'cf_session_id';
+  var API_STORAGE_KEY = 'cf_api_url';
   var FLUSH_INTERVAL = 1500; // Flush queue every 1.5 seconds for snappy updates
   var BATCH_MAX_SIZE = 15;
 
-  // Determine API endpoint from script attribute or window variable
-  var scriptTag = document.currentScript;
-  var API_URL =
-    (scriptTag && scriptTag.getAttribute('data-api')) ||
-    window.CF_TRACKER_API ||
-    'http://localhost:5000';
+  // Determine API endpoint
+  function resolveApiUrl() {
+    // 1. Check URL query parameter (e.g. ?api=https://casual-funnel-api.onrender.com)
+    try {
+      var urlParams = new URLSearchParams(window.location.search);
+      var paramApi = urlParams.get('api') || urlParams.get('api_url');
+      if (paramApi && paramApi.trim()) {
+        var cleanParam = paramApi.trim().replace(/\/+$/, '');
+        localStorage.setItem(API_STORAGE_KEY, cleanParam);
+        return cleanParam;
+      }
+    } catch (e) {}
 
-  // Remove trailing slash if present
-  API_URL = API_URL.replace(/\/+$/, '');
+    // 2. Check localStorage override (configured via HUD)
+    try {
+      var storedApi = localStorage.getItem(API_STORAGE_KEY);
+      if (storedApi && storedApi.trim()) {
+        return storedApi.trim().replace(/\/+$/, '');
+      }
+    } catch (e) {}
+
+    // 3. Check data-api attribute on current script tag
+    var scriptTag = document.currentScript;
+    if (scriptTag) {
+      var attrApi = scriptTag.getAttribute('data-api');
+      if (attrApi && attrApi.trim()) {
+        return attrApi.trim().replace(/\/+$/, '');
+      }
+    }
+
+    // 4. Check global window variable
+    if (window.CF_TRACKER_API && window.CF_TRACKER_API.trim()) {
+      return window.CF_TRACKER_API.trim().replace(/\/+$/, '');
+    }
+
+    // 5. If running on localhost or 127.0.0.1, default to port 5000
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
+    }
+
+    // 6. Default to same origin or fallback
+    return window.location.origin.replace(/\/+$/, '');
+  }
+
+  var API_URL = resolveApiUrl();
 
   // ── Session Management (localStorage with Cookie fallback) ────
   function getCookie(name) {
@@ -98,11 +137,12 @@
     }
     if (eventQueue.length === 0) return;
 
+    var targetUrl = API_URL + '/api/events';
     var batch = eventQueue.splice(0);
     var payload = JSON.stringify({ events: batch });
 
     // Use fetch with keepalive: true (best modern browser support for reliable analytics)
-    fetch(API_URL + '/api/events', {
+    fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -114,14 +154,14 @@
         if (!res.ok) {
           throw new Error('HTTP ' + res.status);
         }
-        console.log('[CF Tracker] Dispatched ' + batch.length + ' event(s) to ' + API_URL);
+        console.log('[CF Tracker] Dispatched ' + batch.length + ' event(s) to ' + targetUrl);
       })
       .catch(function (err) {
         console.warn('[CF Tracker] Fetch failed, attempting sendBeacon fallback:', err.message);
         // Fallback to sendBeacon if fetch fails
         if (navigator.sendBeacon) {
           var blob = new Blob([payload], { type: 'application/json' });
-          navigator.sendBeacon(API_URL + '/api/events', blob);
+          navigator.sendBeacon(targetUrl, blob);
         }
       });
   }
@@ -129,14 +169,15 @@
   // Flush on page exit
   function handleUnload() {
     if (eventQueue.length === 0) return;
+    var targetUrl = API_URL + '/api/events';
     var batch = eventQueue.splice(0);
     var payload = JSON.stringify({ events: batch });
 
     if (navigator.sendBeacon) {
       var blob = new Blob([payload], { type: 'application/json' });
-      navigator.sendBeacon(API_URL + '/api/events', blob);
+      navigator.sendBeacon(targetUrl, blob);
     } else {
-      fetch(API_URL + '/api/events', {
+      fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,
@@ -164,7 +205,7 @@
   }
 
   function trackClick(e) {
-    // Avoid tracking clicks on the tracker's own debug UI if present
+    // Avoid tracking clicks on the tracker's own debug UI
     if (e.target && e.target.closest && e.target.closest('.cf-ignore-track')) {
       return;
     }
@@ -176,7 +217,7 @@
     console.log('[CF Tracker] Click at (' + event.click_x + ', ' + event.click_y + ')');
     enqueueEvent(event);
 
-    // Notify any registered UI listener (for demo visual feedback)
+    // Notify registered UI listener (for demo visual feedback)
     if (typeof window.onCausalFunnelEvent === 'function') {
       window.onCausalFunnelEvent(event);
     }
@@ -186,6 +227,7 @@
   function init() {
     var sessionId = getSessionId();
     console.log('[CF Tracker] Initialized with session_id:', sessionId);
+    console.log('[CF Tracker] Target API URL:', API_URL);
 
     // Track initial page view
     trackPageView();
@@ -219,6 +261,15 @@
     // Expose API for testing / manual triggering
     window.CausalFunnelTracker = {
       getSessionId: getSessionId,
+      getApiUrl: function () {
+        return API_URL;
+      },
+      setApiUrl: function (newUrl) {
+        if (!newUrl) return;
+        API_URL = newUrl.trim().replace(/\/+$/, '');
+        localStorage.setItem(API_STORAGE_KEY, API_URL);
+        console.log('[CF Tracker] API URL updated to:', API_URL);
+      },
       trackPageView: trackPageView,
       trackClick: trackClick,
       flush: flushEvents,

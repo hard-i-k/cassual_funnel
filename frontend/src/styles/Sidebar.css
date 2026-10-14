@@ -115,6 +115,30 @@
   color: #818cf8;
 }
 
+.demo-nav-link {
+  background-color: rgba(99, 102, 241, 0.08);
+  border: 1px dashed rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+
+.demo-nav-link:hover {
+  background-color: rgba(99, 102, 241, 0.16);
+  color: #ffffff;
+  border-color: rgba(99, 102, 241, 0.6);
+}
+
+.demo-pill {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: #4f46e5;
+  color: #ffffff;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+}
+
 .sidebar-footer {
   padding: 1.25rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
