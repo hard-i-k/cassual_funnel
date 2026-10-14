@@ -5,6 +5,7 @@ import SessionsTable from '../components/SessionsTable';
 export default function SessionsPage() {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [autoSync, setAutoSync] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
