@@ -46,7 +46,7 @@ export default function HeatmapPage() {
       }
     } catch (err) {
       console.error('Failed to fetch pages:', err);
-      setPagesError(err.response?.data?.message || err.message || 'Failed to load tracked pages.');
+      setPagesError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to load tracked pages.');
     } finally {
       setIsLoadingPages(false);
     }
@@ -85,7 +85,7 @@ export default function HeatmapPage() {
       setTotalClicks(total);
     } catch (err) {
       console.error(`Failed to fetch heatmap data for page ${page}:`, err);
-      setHeatmapError(err.response?.data?.message || err.message || `Failed to load heatmap for ${page}`);
+      setHeatmapError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || `Failed to load heatmap for ${page}`);
       setClicks([]);
       setTotalClicks(0);
     } finally {

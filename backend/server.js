@@ -8,10 +8,10 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/user_analytics';
+let MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/user_analytics';
 
 // Middleware
-// Enable CORS for frontend (port 3000) and any origin
+// Enable CORS for frontend and tracking script from any origin
 app.use(
   cors({
     origin: '*',
@@ -50,6 +50,7 @@ app.get('/', (req, res) => {
   res.json({
     name: 'User Analytics API',
     version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     endpoints: {
       health: 'GET /health',
       events: 'POST /api/events',
@@ -59,6 +60,21 @@ app.get('/', (req, res) => {
       pages: 'GET /api/pages',
     },
   });
+});
+
+// Database guard middleware: prevents requests from hanging if MongoDB is not connected
+app.use('/api', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database connection unavailable. MongoDB is not connected.',
+      sessions: [],
+      events: [],
+      pages: [],
+      clicks: [],
+    });
+  }
+  next();
 });
 
 // Import route modules
@@ -85,7 +101,6 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   console.error('[Error] Server caught unhandled error:', err);
 
-  // Mongoose validation error
   if (err.name === 'ValidationError') {
     const messages = Object.values(err.errors).map((e) => e.message);
     return res.status(400).json({
@@ -95,7 +110,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Mongoose duplicate key error
   if (err.code === 11000) {
     return res.status(409).json({
       success: false,
@@ -103,7 +117,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // CastError (e.g. invalid ObjectId or parameter format)
   if (err.name === 'CastError') {
     return res.status(400).json({
       success: false,
@@ -118,24 +131,44 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Connect to MongoDB with IPv4 fallback
+async function connectToMongo(uri) {
+  const options = {
+    serverSelectionTimeoutMS: 5000,
+  };
+
+  try {
+    console.log(`Connecting to MongoDB at: ${uri.replace(/\/\/.*@/, '//<credentials>@')}`);
+    await mongoose.connect(uri, options);
+    console.log('MongoDB connected successfully');
+    return true;
+  } catch (err) {
+    console.warn(`Primary connection to ${uri} failed: ${err.message}`);
+    // If localhost failed due to Windows IPv6 resolution, fallback to 127.0.0.1
+    if (uri.includes('localhost')) {
+      const fallbackUri = uri.replace('localhost', '127.0.0.1');
+      console.log(`Attempting IPv4 fallback connection at: ${fallbackUri}`);
+      try {
+        await mongoose.connect(fallbackUri, options);
+        console.log('MongoDB connected successfully via IPv4 fallback (127.0.0.1)');
+        return true;
+      } catch (fallbackErr) {
+        console.error('Fallback connection failed:', fallbackErr.message);
+      }
+    }
+    return false;
+  }
+}
+
 // Database Connection and Server Startup
 async function startServer() {
-  try {
-    console.log(`Connecting to MongoDB at: ${MONGODB_URI.replace(/\/\/.*@/, '//<credentials>@')}`);
-    await mongoose.connect(MONGODB_URI);
-    console.log('MongoDB connected successfully');
+  const isConnected = await connectToMongo(MONGODB_URI);
 
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
-      console.log(`Ready to receive events at http://localhost:${PORT}/api/events`);
-    });
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error.message);
-    console.log('Server starting without active database connection; requests requiring DB may fail.');
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT} (Database disconnected)`);
-    });
-  }
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT} (${isConnected ? 'Database connected' : 'Database DISCONNECTED'})`);
+    console.log(`API health: http://localhost:${PORT}/health`);
+    console.log(`Ready to receive events at http://localhost:${PORT}/api/events`);
+  });
 }
 
 // Start the server if this file is run directly

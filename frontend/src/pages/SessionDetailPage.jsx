@@ -28,7 +28,7 @@ export default function SessionDetailPage() {
       setEvents(list);
     } catch (err) {
       console.error('Failed to fetch session events:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to load events for this session.');
+      setError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to load events for this session.');
     } finally {
       setIsLoading(false);
     }

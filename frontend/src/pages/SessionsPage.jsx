@@ -19,7 +19,7 @@ export default function SessionsPage() {
       setSessions(list);
     } catch (err) {
       console.error('Failed to fetch sessions:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to load sessions from server.');
+      setError(err.userMessage || err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to load sessions from server.');
     } finally {
       setIsLoading(false);
     }
