@@ -5,8 +5,8 @@ import SessionsTable from '../components/SessionsTable';
 export default function SessionsPage() {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [autoSync, setAutoSync] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const fetchSessions = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -18,6 +18,7 @@ export default function SessionsPage() {
         ? data
         : data.sessions || data.data || [];
       setSessions(list);
+      setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
       if (!silent) {
         console.error('Failed to fetch sessions:', err);
@@ -57,6 +58,11 @@ export default function SessionsPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {lastUpdated && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginRight: '0.25rem' }}>
+              Synced: {lastUpdated}
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-sm btn-secondary"
