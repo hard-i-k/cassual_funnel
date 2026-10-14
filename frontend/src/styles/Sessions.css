@@ -4,43 +4,48 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem 1.5rem;
+  padding: 1.125rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   gap: 1rem;
   flex-wrap: wrap;
+  background-color: #ffffff;
 }
 
 .search-box-wrapper {
   position: relative;
   display: flex;
   align-items: center;
-  min-width: 280px;
+  min-width: 300px;
 }
 
 .search-icon {
   position: absolute;
   left: 0.875rem;
-  width: 16px;
-  height: 16px;
-  color: var(--text-muted);
+  width: 15px;
+  height: 15px;
+  color: var(--text-dim);
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 0.5625rem 0.875rem 0.5625rem 2.375rem;
+  padding: 0.5rem 0.875rem 0.5rem 2.25rem;
   font-size: 0.875rem;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   outline: none;
   background-color: #ffffff;
   color: var(--text-primary);
-  transition: all 0.15s ease;
+  transition: all 0.15s ease-in-out;
 }
 
 .search-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.search-input::placeholder {
+  color: var(--text-dim);
 }
 
 .sessions-table-wrapper {
@@ -60,22 +65,22 @@
 }
 
 .sessions-table th {
-  padding: 0.875rem 1.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.8125rem 1.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
 }
 
 .sessions-table tbody tr {
   border-bottom: 1px solid var(--border-light);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease-in-out;
 }
 
 .sessions-table tbody tr:hover {
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
 }
 
 .sessions-table tbody tr:last-child {
@@ -95,25 +100,27 @@
   align-items: center;
   gap: 0.5rem;
   background-color: #f1f5f9;
-  padding: 0.3125rem 0.625rem;
-  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-xs);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8125rem;
   color: var(--text-secondary);
   border: 1px solid #e2e8f0;
+  font-weight: 500;
 }
 
 .copy-btn {
   background: transparent;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 2px 6px;
-  font-size: 0.75rem;
+  padding: 1px 5px;
+  font-size: 0.6875rem;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   transition: all 0.15s ease;
 }
 
@@ -128,13 +135,14 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  background-color: var(--badge-blue-bg);
-  color: var(--badge-blue);
+  background-color: var(--color-pageview-bg);
+  color: var(--color-pageview);
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   padding: 0.25rem 0.625rem;
   border-radius: 9999px;
-  border: 1px solid rgba(37, 99, 235, 0.15);
+  border: 1px solid var(--color-pageview-border);
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .timestamp-cell {
@@ -145,6 +153,7 @@
 .timestamp-main {
   font-size: 0.875rem;
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .row-action {
@@ -166,7 +175,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.875rem 1.5rem;
-  background-color: #f8fafc;
+  background-color: #ffffff;
   border-top: 1px solid var(--border-color);
   font-size: 0.8125rem;
   color: var(--text-muted);

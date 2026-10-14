@@ -1,37 +1,60 @@
-import { NavLink } from 'react-router-dom'
-import '../styles/Sidebar.css'
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import '../styles/Sidebar.css';
 
-function Sidebar() {
+export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <span className="brand-icon">📊</span>
-        <h1>Analytics</h1>
+        <div className="brand-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 3v18h18" />
+            <path d="m19 9-5 5-4-4-3 3" />
+          </svg>
+        </div>
+        <div className="brand-info">
+          <span className="brand-title">CausalFunnel</span>
+          <span className="brand-subtitle">Analytics Engine</span>
+        </div>
       </div>
 
       <nav className="sidebar-nav">
+        <div className="nav-section-label">Monitoring</div>
+
         <NavLink
           to="/sessions"
           className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-          <span className="nav-icon">👥</span>
+          <svg className="nav-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
           <span>Sessions</span>
         </NavLink>
+
         <NavLink
           to="/heatmap"
           className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-          <span className="nav-icon">🔥</span>
-          <span>Heatmap</span>
+          <svg className="nav-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M3 9h18" />
+            <path d="M9 3v18" />
+            <circle cx="15" cy="15" r="2" fill="currentColor" />
+          </svg>
+          <span>Click Heatmap</span>
         </NavLink>
       </nav>
 
       <div className="sidebar-footer">
-        <p>CausalFunnel</p>
-        <small>User Analytics v1.0</small>
+        <div className="system-status">
+          <span className="status-indicator-dot"></span>
+          <span>System Active</span>
+        </div>
+        <div className="version-tag">Version 1.0.0</div>
       </div>
     </aside>
-  )
+  );
 }
-
-export default Sidebar

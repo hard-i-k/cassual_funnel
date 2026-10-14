@@ -352,8 +352,8 @@ export default function Heatmap({
               >
                 X: {hoverInfo.x}px, Y: {hoverInfo.y}px
                 {hoverInfo.nearbyCount > 0 && (
-                  <div>
-                    🔥 {hoverInfo.nearbyCount} click{hoverInfo.nearbyCount > 1 ? 's' : ''} here
+                  <div style={{ marginTop: '2px', color: '#fca5a5' }}>
+                    Density: {hoverInfo.nearbyCount} click{hoverInfo.nearbyCount > 1 ? 's' : ''} in region
                   </div>
                 )}
               </div>

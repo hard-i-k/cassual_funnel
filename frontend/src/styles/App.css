@@ -1,21 +1,39 @@
+/* Design System Variables — Modern Enterprise Analytics Theme */
 :root {
   --primary: #4f46e5;
   --primary-hover: #4338ca;
   --primary-light: #eef2ff;
+  --primary-surface: rgba(79, 70, 229, 0.08);
+
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+
   --bg-app: #f8fafc;
   --bg-card: #ffffff;
+  --bg-subtle: #f1f5f9;
+
   --border-color: #e2e8f0;
-  --border-light: #f1f5f9;
-  --badge-blue: #2563eb;
-  --badge-blue-bg: #eff6ff;
-  --badge-orange: #ea580c;
-  --badge-orange-bg: #fff7ed;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --border-light: #edf2f7;
+
+  --color-pageview: #2563eb;
+  --color-pageview-bg: #eff6ff;
+  --color-pageview-border: rgba(37, 99, 235, 0.2);
+
+  --color-click: #ea580c;
+  --color-click-bg: #fff7ed;
+  --color-click-border: rgba(234, 88, 12, 0.2);
+
+  --color-success: #10b981;
+  --color-success-bg: #ecfdf5;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -45,13 +63,13 @@ body {
 .main-content {
   flex: 1;
   margin-left: 260px;
-  padding: 2rem 2.5rem;
+  padding: 2.25rem 3rem;
   background-color: var(--bg-app);
   min-height: 100vh;
 }
 
 .page-wrapper {
-  max-width: 1300px;
+  max-width: 1320px;
   margin: 0 auto;
 }
 
@@ -60,21 +78,24 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.75rem;
-  gap: 1rem;
+  margin-bottom: 2rem;
+  gap: 1.25rem;
+  flex-wrap: wrap;
 }
 
 .page-title {
-  font-size: 1.75rem;
+  font-size: 1.625rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
 .page-subtitle {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: 0.35rem;
+  font-weight: 400;
 }
 
 /* Buttons */
@@ -82,7 +103,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.125rem;
+  padding: 0.5625rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
@@ -90,26 +111,29 @@ body {
   cursor: pointer;
   transition: all 0.15s ease-in-out;
   text-decoration: none;
+  line-height: 1.25;
 }
 
 .btn-primary {
   background-color: var(--primary);
   color: #ffffff;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.2);
 }
 
 .btn-primary:hover {
   background-color: var(--primary-hover);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
 }
 
 .btn-secondary {
   background-color: #ffffff;
   color: var(--text-secondary);
   border-color: var(--border-color);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-secondary:hover {
-  background-color: var(--border-light);
+  background-color: var(--bg-subtle);
   color: var(--text-primary);
   border-color: #cbd5e1;
 }
@@ -127,7 +151,7 @@ body {
 /* Quick Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.25rem;
   margin-bottom: 2rem;
 }
@@ -140,22 +164,31 @@ body {
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .stat-label {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .stat-value {
-  font-size: 1.875rem;
+  font-size: 2rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0.25rem 0;
-  letter-spacing: -0.02em;
+  margin: 0.35rem 0 0.15rem;
+  letter-spacing: -0.03em;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .stat-subtext {
@@ -178,12 +211,14 @@ body {
   align-items: center;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
+  background-color: #ffffff;
 }
 
 .card-title {
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 /* State Box (Loading / Empty) */
@@ -191,7 +226,7 @@ body {
   background: var(--bg-card);
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-color);
-  padding: 3.5rem 2rem;
+  padding: 4rem 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -209,15 +244,15 @@ body {
 .state-desc {
   font-size: 0.875rem;
   color: var(--text-muted);
-  margin-top: 0.375rem;
+  margin-top: 0.35rem;
   max-width: 440px;
 }
 
 /* Spinner */
 .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e2e8f0;
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid #e2e8f0;
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -232,13 +267,14 @@ body {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #991b1b;
-  padding: 1rem 1.25rem;
+  padding: 0.875rem 1.25rem;
   border-radius: var(--radius-sm);
   margin-bottom: 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+  font-size: 0.875rem;
 }
 
 .error-message {
@@ -246,12 +282,11 @@ body {
   font-weight: 500;
 }
 
-/* Monospace text */
+/* Monospace font utility */
 .mono {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-/* Responsive */
 @media (max-width: 1024px) {
   .main-content {
     margin-left: 0;
